@@ -26,22 +26,25 @@ ENV CSV_PATH=/var/lib/mysql-files/titanic_passengers.csv
 # --- 複製並安裝 importer.py 的 Python 依賴 ---
 # 設定工作目錄為 /app
 WORKDIR /app
-COPY db-importer/requirements.txt .
+# 修正 COPY 路徑
+COPY requirements.txt .
 # 安裝 Python 依賴，--no-cache-dir 避免安裝包的快取，減少映像檔大小
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # --- 複製匯入腳本和 CSV 資料檔案 ---
 # 複製 Python 匯入腳本
-COPY db-importer/importer.py .
+# 修正 COPY 路徑
+COPY importer.py .
 # 複製 CSV 檔案到 MySQL 的安全檔案目錄。
 # /var/lib/mysql-files/ 是 MySQL 預設允許 LOAD DATA INFILE 的位置。
 # 注意：如果原始檔案名包含空格，最好在 COPY 時重新命名或處理。
-# 這裡假設已將 "titanic passengers.csv" 重新命名為 "titanic_passengers.csv"
-COPY db-importer/titanic_passengers.csv /var/lib/mysql-files/titanic_passengers.csv
+# 修正 COPY 路徑
+COPY titanic\ passengers.csv /var/lib/mysql-files/titanic_passengers.csv
 
 # --- 複製並設定自定義的 entrypoint 腳本 ---
 # 這個 entrypoint 腳本將處理等待 MySQL 就緒，然後運行匯入程序。
-COPY db-importer/entrypoint.sh /usr/local/bin/custom-mysql-entrypoint.sh
+# 修正 COPY 路徑
+COPY entrypoint.sh /usr/local/bin/custom-mysql-entrypoint.sh
 # 賦予 entrypoint 腳本執行權限
 RUN chmod +x /usr/local/bin/custom-mysql-entrypoint.sh
 
