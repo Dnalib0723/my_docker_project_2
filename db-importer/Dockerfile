@@ -22,6 +22,9 @@ RUN apt-get update && \
         python3 \
         python3-pip \
         && \
+    # 創建 MySQL 日誌目錄並設定權限
+    mkdir -p /var/log/mysql && \
+    chown mysql:mysql /var/log/mysql && \
     # 清理 apt 快取，以保持映像檔精簡
     rm -rf /var/lib/apt/lists/*
 
@@ -44,7 +47,7 @@ COPY importer.py .
 # 複製 CSV 資料檔案到 MySQL 安全目錄
 # /var/lib/mysql-files/ 是 MySQL 預設允許 LOAD DATA INFILE 的位置。
 # 確保原始檔案名 "titanic passengers.csv" 在複製時被重新命名或處理為 "titanic_passengers.csv"
-COPY titanic_passengers.csv /var/lib/mysql-files/titanic_passengers.csv
+COPY titanic\ passengers.csv /var/lib/mysql-files/titanic_passengers.csv
 
 # 複製自定義的 entrypoint 腳本
 # 這個腳本將處理 MySQL 的初始化、啟動和 importer.py 的執行
