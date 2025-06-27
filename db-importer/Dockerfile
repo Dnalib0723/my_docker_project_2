@@ -39,7 +39,7 @@ COPY importer.py .
 # /var/lib/mysql-files/ 是 MySQL 預設允許 LOAD DATA INFILE 的位置。
 # 注意：如果原始檔案名包含空格，最好在 COPY 時重新命名或處理。
 # 修正 COPY 路徑
-COPY titanic\ passengers.csv /var/lib/mysql-files/titanic_passengers.csv
+COPY titanic_passengers.csv /var/lib/mysql-files/titanic_passengers.csv
 
 # --- 複製並設定自定義的 entrypoint 腳本 ---
 # 這個 entrypoint 腳本將處理等待 MySQL 就緒，然後運行匯入程序。
