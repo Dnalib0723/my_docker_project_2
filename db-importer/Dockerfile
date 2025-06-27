@@ -8,9 +8,9 @@ FROM mysql:8.0
 # python3: 用於運行 importer.py
 # python3-pip: 用於安裝 Python 套件 (mysql-connector-python)
 # default-mysql-client: 提供 'mysql' 命令，用於 entrypoint.sh 中的健康檢查
-# 已將 'apt-get' 替換為 'apt'
-RUN apt update && \
-    apt install -y --no-install-recommends \
+# 已將 'apt' 替換為 'apt-get' 並使用完整路徑 /usr/bin/apt-get
+RUN /usr/bin/apt-get update && \
+    /usr/bin/apt-get install -y --no-install-recommends \
         python3 python3-pip default-mysql-client && \
     # 清理 apt 快取，以保持映像檔精簡
     rm -rf /var/lib/apt/lists/*
