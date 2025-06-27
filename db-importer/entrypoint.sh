@@ -78,7 +78,8 @@ MAIN_MYSQL_PID=$! # 捕獲主 MySQL 進程的 PID
 # 等待主要的 MySQL 伺服器完全啟動並接受連接
 echo "Waiting for main MySQL server to be fully up and accessible before running importer..."
 # 這裡移除 &>/dev/null，以顯示更詳細的 mysql 客戶端錯誤訊息
-until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -e "SELECT 1;"; do
+# --- 修改為使用 root 用戶進行健康檢查 (修訂) ---
+until mysql -h "127.0.0.1" -P "3306" -u "root" -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1;"; do
     echo "MySQL is unavailable - sleeping (main server check)"
     # 檢查背景 MySQL 進程是否仍然存活。如果沒有，則表示出現問題。
     if ! kill -0 "$MAIN_MYSQL_PID" &>/dev/null; then
