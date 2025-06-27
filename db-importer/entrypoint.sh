@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
-# set -x # 取消註解此行以啟用除錯輸出
+# set -x # 取消註解此行以啟用除錯輸出，這會輸出腳本執行的每個命令，有助於除錯
 
 # Custom entrypoint for db-importer service
 
-# 確保 'mysql' 用戶和組存在
+# 確保 'mysql' 用戶和組存在 (在 Debian 基礎映像中通常已經存在，但以防萬一)
 if ! id "mysql" &>/dev/null; then
     echo "Creating mysql user and group..."
     adduser --system --no-create-home --group mysql
@@ -16,7 +16,7 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     echo "Initializing MySQL data directory..."
     # 確保數據目錄的所有權限正確
     chown -R mysql:mysql /var/lib/mysql
-    chmod 700 /var/lib/mysql # 限制權限以提高安全性
+    chmod 700 /var/lib/mysql # 建議在生產環境中更嚴格的權限
 
     # 執行 MySQL 數據目錄初始化
     # --initialize-insecure: 創建數據目錄並設置臨時無密碼的 root 用戶
@@ -60,32 +60,45 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     sleep 5 # 給予文件系統同步時間
 fi
 
-# 啟動主要的 MySQL 伺服器進程 (此時它將由 exec "$@" 命令在前台運行)
-echo "Starting main MySQL server for the container's primary process..."
-# 我們不再在這裡背景啟動 mysqld，而是讓它由 CMD 接管
+# --- 關鍵改動：在這裡啟動主要的 MySQL 服務進程到背景 ---
+# 這樣在 importer.py 嘗試連接時，MySQL 服務已經在運行。
+echo "Starting main MySQL server in background (for importer and continued operation)..."
+/usr/sbin/mysqld --user=mysql --datadir=/var/lib/mysql --log-error=/var/log/mysql/error.log &
+MAIN_MYSQL_PID=$! # 捕獲主 MySQL 進程的 PID
 
 # 等待主要的 MySQL 伺服器完全啟動並接受連接
 echo "Waiting for main MySQL server to be fully up and accessible before running importer..."
 # 使用在 docker-compose.yml 中設定的用戶和密碼進行連接檢查
 until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -e "SELECT 1;" &>/dev/null; do
     echo "MySQL is unavailable - sleeping (main server check)"
-    # 如果 MySQL 遲遲未能啟動，檢查日誌文件
-    if [ -f "/var/log/mysql/error.log" ]; then
-        echo "--- Latest MySQL Error Log ---"
-        tail -n 10 /var/log/mysql/error.log
-        echo "-----------------------------"
+    # 檢查背景 MySQL 進程是否仍然存活。如果沒有，則表示出現問題。
+    if ! kill -0 "$MAIN_MYSQL_PID" &>/dev/null; then
+        echo "ERROR: Main MySQL process (PID $MAIN_MYSQL_PID) has died unexpectedly!"
+        if [ -f "/var/log/mysql/error.log" ]; then
+            echo "--- Latest MySQL Error Log ---"
+            tail -n 20 /var/log/mysql/error.log
+            echo "-----------------------------"
+        fi
+        exit 1 # 如果 MySQL 進程死亡，退出 entrypoint
     fi
-    sleep 5 # 增加等待間隔
+
+    # 如果有日誌文件，輸出最後幾行以協助除錯
+    if [ -f "/var/log/mysql/error.log" ]; then
+        echo "--- Latest MySQL Error Log (during check) ---"
+        tail -n 10 /var/log/mysql/error.log
+        echo "---------------------------------------------"
+    fi
+    sleep 5 # 增加等待間隔，給予 MySQL 更多啟動時間
 done
-echo "MySQL is up and running in foreground/background!"
+echo "Main MySQL server is up and running!"
 
 # 運行資料匯入腳本
 echo "Running data importer..."
 python3 /app/importer.py
 echo "Data importer finished."
 
-# 將主要的 MySQL 伺服器進程帶到前台
-# `exec "$@"` 會替換當前 shell 進程為 CMD 中提供的命令 (即 `mysqld`)，
-# 這樣 MySQL 伺服器就會成為容器的主進程，保持容器運行。
-echo "Importer finished. Transferring control to MySQL server (CMD)."
-exec "$@"
+# 保持主要的 MySQL 伺服器進程在前台運行
+# 因為 mysqld 已經在背景中啟動，我們使用 `wait` 命令等待它，確保容器存活。
+# 如果 `mysqld` 由於某些原因退出，這會導致容器也退出。
+echo "Importer finished. Keeping MySQL server running (PID: $MAIN_MYSQL_PID) in foreground."
+wait "$MAIN_MYSQL_PID"
