@@ -36,6 +36,7 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 
     # 等待臨時 MySQL 伺服器準備就緒
     # 將 stderr 導向 /dev/null 防止無關輸出干擾
+    # 這裡仍然使用無需密碼的 root 連接，因為 unix_socket 通常在這個階段是有效的
     until mysql -u root -e "SELECT 1;" &>/dev/null; do
         echo "Waiting for temporary MySQL server to be ready (initial setup loop)..."
         sleep 2
@@ -45,24 +46,21 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     # 執行 MySQL 的初始設置步驟 (設定 root 密碼，創建用戶/資料庫)
     echo "Running MySQL initial setup and user configuration..."
 
-    # --- 新增：先刪除可能存在的 root@localhost 和 root@127.0.0.1，以清除 unix_socket 默認行為 ---
-    echo "Dropping existing root@localhost and root@127.0.0.1 users if they exist..."
-    # 使用 OR IGNORE 避免因為用戶不存在而報錯
-    mysql -u root -e "DROP USER IF EXISTS 'root'@'localhost';" || { echo "WARNING: Could not drop root@localhost. Might not exist or permissions."; cat /var/log/mysql/temp_error.log; }
-    mysql -u root -e "DROP USER IF EXISTS 'root'@'127.0.0.1';" || { echo "WARNING: Could not drop root@127.0.0.1. Might not exist or permissions."; cat /var/log/mysql/temp_error.log; }
+    # --- 關鍵修改：更換 root@localhost 的認證方式 ---
+    # 先刪除可能存在的 root@localhost (它可能預設使用 unix_socket)
+    echo "Dropping existing 'root'@'localhost' user to clear unix_socket default..."
+    mysql -u root -e "DROP USER IF EXISTS 'root'@'localhost';" || { echo "WARNING: Could not drop 'root'@'localhost'. It might not exist or permissions are restrictive for DROP. Proceeding..."; }
 
-    # --- 新增：重新創建 root 用戶，明確指定 mysql_native_password 插件 ---
-    echo "Creating root@localhost and root@127.0.0.1 with mysql_native_password..."
-    mysql -u root -e "CREATE USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || { echo "ERROR: Failed to create root@localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
-    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;" || { echo "ERROR: Failed to grant privileges to root@localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
-
-    mysql -u root -e "CREATE USER 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || { echo "ERROR: Failed to create root@127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
-    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;" || { echo "ERROR: Failed to grant privileges to root@127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
+    # 重新創建 'root' 用戶，並明確指定 'mysql_native_password' 認證插件
+    # 設置為從任何主機 '%' 連接，以確保密碼認證生效
+    echo "Creating 'root'@'%' with mysql_native_password and specified password..."
+    mysql -u root -e "CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || { echo "ERROR: Failed to create 'root'@'%'."; cat /var/log/mysql/temp_error.log; exit 1; }
+    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;" || { echo "ERROR: Failed to grant privileges to 'root'@'%'."; cat /var/log/mysql/temp_error.log; exit 1; }
 
     # 創建資料庫
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};" || { echo "ERROR: Failed to create database."; cat /var/log/mysql/temp_error.log; exit 1; }
 
-    # 創建應用用戶並授予權限，同時針對 'localhost' 和 '127.0.0.1'
+    # 創建應用用戶並授予權限 (同樣明確指定 mysql_native_password)
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${MYSQL_USER}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_PASSWORD}';" || { echo "ERROR: Failed to create user for localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';" || { echo "ERROR: Failed to grant privileges to localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
 
@@ -90,8 +88,9 @@ MAIN_MYSQL_PID=$! # 捕獲主 MySQL 進程的 PID
 
 # 等待主要的 MySQL 伺服器完全啟動並接受連接
 echo "Waiting for main MySQL server to be fully up and accessible before running importer..."
-# --- 改用應用用戶進行健康檢查 ---
-until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -e "SELECT 1;"; do # 改為使用 MYSQL_USER
+# --- 健康檢查改用應用用戶，並明確指定透過 TCP 連接 ---
+# 增加 --protocol=tcp 確保不使用 unix_socket
+until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" --protocol=tcp -e "SELECT 1;"; do
     echo "MySQL is unavailable - sleeping (main server check)"
     # 檢查背景 MySQL 進程是否仍然存活。如果沒有，則表示出現問題。
     if ! kill -0 "$MAIN_MYSQL_PID" &>/dev/null; then
