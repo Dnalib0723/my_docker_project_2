@@ -1,0 +1,44 @@
+# my_project/docker-compose.yml
+version: '3.8'
+
+services:
+  db-importer: # 新的服務名稱，包含 MySQL 和資料匯入
+    build: ./db-importer
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: my_database
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306" # MySQL 服務的端口
+    # 可選：用於持久化 MySQL 資料
+    # volumes:
+    #   - db-data:/var/lib/mysql
+
+  api-service:
+    build: ./api-service
+    depends_on:
+      - db-importer # 現在依賴合併後的服務
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_APP: api_app.py
+      FLASK_RUN_HOST: 0.0.0.0
+      DB_HOST: db-importer # 指向新的合併服務的主機名
+      DB_NAME: my_database
+      DB_USER: user
+      DB_PASSWORD: password
+    restart: always
+
+  web-frontend:
+    build: ./web-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api-service
+    restart: always
+
+# 可選：定義具名資料卷用於持久化資料
+# volumes:
+#   db-data:

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titanic 乘客資料</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="container mx-auto p-4 bg-white shadow-lg rounded-xl">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">Titanic 乘客資料</h1>
+        <button id="fetchDataBtn"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow-md transition duration-300 ease-in-out block mx-auto mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
+            載入乘客資料
+        </button>
+        <div id="loadingIndicator" class="text-center text-blue-500 text-lg hidden">
+            載入中...
+        </div>
+        <div id="passengerList" class="overflow-x-auto">
+            <table class="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <thead class="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
+                    <tr>
+                        <th class="py-3 px-6 text-left">ID</th>
+                        <th class="py-3 px-6 text-left">姓名</th>
+                        <th class="py-3 px-6 text-left">性別</th>
+                        <th class="py-3 px-6 text-left">年齡</th>
+                        <th class="py-3 px-6 text-left">存活</th>
+                        <th class="py-3 px-6 text-left">艙等</th>
+                        <th class="py-3 px-6 text-left">票價</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="text-gray-600 text-sm font-light">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+
+</html>

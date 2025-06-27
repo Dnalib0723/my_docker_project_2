@@ -1,0 +1,3 @@
+# my_project/api-service/requirements.txt
+Flask
+mysql-connector-python
