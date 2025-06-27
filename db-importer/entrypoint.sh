@@ -49,16 +49,16 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     # 創建資料庫
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};" || { echo "ERROR: Failed to create database."; cat /var/log/mysql/temp_error.log; exit 1; }
 
-    # 創建用戶並授予權限，同時針對 'localhost' 和 '127.0.0.1' (新增)
+    # 創建用戶並授予權限，同時針對 'localhost' 和 '127.0.0.1'
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PASSWORD}';" || { echo "ERROR: Failed to create user for localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';" || { echo "ERROR: Failed to grant privileges to localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
 
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${MYSQL_USER}'@'127.0.0.1' IDENTIFIED BY '${MYSQL_PASSWORD}';" || { echo "ERROR: Failed to create user for 127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'127.0.0.1';" || { echo "ERROR: Failed to grant privileges to 127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
 
-    # 刷新權限並等待 (新增 sleep 和 sync)
+    # 刷新權限並增加等待時間 (修訂)
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" || { echo "ERROR: Failed to flush privileges."; cat /var/log/mysql/temp_error.log; exit 1; }
-    sleep 2 # 給予 MySQL 一點時間來處理刷新
+    sleep 5 # 給予 MySQL 更多時間來處理刷新 (從 2s 增加到 5s)
     sync # 強制文件系統同步，確保更改寫入磁碟
 
     # 關閉臨時 MySQL 伺服器
@@ -66,7 +66,7 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     kill $MYSQL_TEMP_PID
     wait $MYSQL_TEMP_PID || true # `|| true` 防止在進程已經結束時腳本因錯誤而退出
     echo "Temporary MySQL server stopped. Initialization complete."
-    sleep 5 # 給予文件系統更多時間來同步，避免下一個 mysqld 進程讀取到舊狀態
+    sleep 10 # 給予文件系統更多時間來同步，避免下一個 mysqld 進程讀取到舊狀態 (從 5s 增加到 10s)
 fi
 
 # --- 關鍵改動：在這裡啟動主要的 MySQL 服務進程到背景 ---
@@ -77,9 +77,8 @@ MAIN_MYSQL_PID=$! # 捕獲主 MySQL 進程的 PID
 
 # 等待主要的 MySQL 伺服器完全啟動並接受連接
 echo "Waiting for main MySQL server to be fully up and accessible before running importer..."
-# 使用在 docker-compose.yml 中設定的用戶和密碼進行連接檢查
-# 注意：這裡使用新創建的用戶進行檢查，而不是 root。
-until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -e "SELECT 1;" &>/dev/null; do
+# 這裡暫時移除 &>/dev/null，以顯示更詳細的 mysql 客戶端錯誤訊息 (修訂)
+until mysql -h "127.0.0.1" -P "3306" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -e "SELECT 1;"; do # 移除 &>/dev/null
     echo "MySQL is unavailable - sleeping (main server check)"
     # 檢查背景 MySQL 進程是否仍然存活。如果沒有，則表示出現問題。
     if ! kill -0 "$MAIN_MYSQL_PID" &>/dev/null; then
