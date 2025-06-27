@@ -10,7 +10,8 @@ def import_data():
     db_user = os.getenv('MYSQL_USER')
     db_password = os.getenv('MYSQL_PASSWORD')
     root_password = os.getenv('MYSQL_ROOT_PASSWORD') # 為了在初始化時使用 root 用戶
-    csv_path = os.getenv('CSV_PATH', '/var/lib/mysql-files/titanic passengers.csv') # MySQL 可存取的位置
+    # --- 修改這裡：將檔案名從 'titanic passengers.csv' 改為 'titanic_passengers.csv' ---
+    csv_path = os.getenv('CSV_PATH', '/var/lib/mysql-files/titanic_passengers.csv') # MySQL 可存取的位置
 
     print(f"Connecting to MySQL at {db_host}...")
     try:
@@ -33,7 +34,7 @@ def import_data():
         cursor.execute(f"USE {db_name}") # 確保使用正確的資料庫
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS passengers (
-                PassengerId INT,
+                PassengerId INT PRIMARY KEY, -- 新增 PRIMARY KEY
                 Survived INT,
                 Pclass INT,
                 Name VARCHAR(255),
