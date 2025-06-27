@@ -44,12 +44,24 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 
     # 執行 MySQL 的初始設置步驟 (設定 root 密碼，創建用戶/資料庫)
     echo "Running MySQL initial setup and user configuration..."
-    # 設定 root 密碼
-    mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}'; FLUSH PRIVILEGES;" || { echo "ERROR: Failed to set root password."; cat /var/log/mysql/temp_error.log; exit 1; }
+
+    # --- 新增：先刪除可能存在的 root@localhost 和 root@127.0.0.1，以清除 unix_socket 默認行為 ---
+    echo "Dropping existing root@localhost and root@127.0.0.1 users if they exist..."
+    mysql -u root -e "DROP USER IF EXISTS 'root'@'localhost';" || { echo "WARNING: Could not drop root@localhost. Might not exist or permissions."; cat /var/log/mysql/temp_error.log; }
+    mysql -u root -e "DROP USER IF EXISTS 'root'@'127.0.0.1';" || { echo "WARNING: Could not drop root@127.0.0.1. Might not exist or permissions."; cat /var/log/mysql/temp_error.log; }
+
+    # --- 新增：重新創建 root 用戶，明確指定 mysql_native_password 插件 ---
+    echo "Creating root@localhost and root@127.0.0.1 with mysql_native_password..."
+    mysql -u root -e "CREATE USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || { echo "ERROR: Failed to create root@localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
+    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;" || { echo "ERROR: Failed to grant privileges to root@localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
+
+    mysql -u root -e "CREATE USER 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || { echo "ERROR: Failed to create root@127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
+    mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;" || { echo "ERROR: Failed to grant privileges to root@127.0.0.1."; cat /var/log/mysql/temp_error.log; exit 1; }
+
     # 創建資料庫
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};" || { echo "ERROR: Failed to create database."; cat /var/log/mysql/temp_error.log; exit 1; }
 
-    # 創建用戶並授予權限，同時針對 'localhost' 和 '127.0.0.1' (新增 IDENTIFIED WITH mysql_native_password)
+    # 創建應用用戶並授予權限，同時針對 'localhost' 和 '127.0.0.1'
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${MYSQL_USER}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_PASSWORD}';" || { echo "ERROR: Failed to create user for localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';" || { echo "ERROR: Failed to grant privileges to localhost."; cat /var/log/mysql/temp_error.log; exit 1; }
 
@@ -78,7 +90,7 @@ MAIN_MYSQL_PID=$! # 捕獲主 MySQL 進程的 PID
 # 等待主要的 MySQL 伺服器完全啟動並接受連接
 echo "Waiting for main MySQL server to be fully up and accessible before running importer..."
 # 這裡移除 &>/dev/null，以顯示更詳細的 mysql 客戶端錯誤訊息
-# --- 修改為使用 root 用戶進行健康檢查 (修訂) ---
+# --- 繼續使用 root 用戶進行健康檢查 ---
 until mysql -h "127.0.0.1" -P "3306" -u "root" -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1;"; do
     echo "MySQL is unavailable - sleeping (main server check)"
     # 檢查背景 MySQL 進程是否仍然存活。如果沒有，則表示出現問題。
